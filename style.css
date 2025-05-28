@@ -1,0 +1,23 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    margin: 0;
+  }
+  #controls {
+    width: 25%;
+    padding: 20px;
+    background: #f5f5f5;
+  }
+  #canvas {
+    border: 1px solid #ccc;
+    background-color: #fff;
+  }
+  label {
+    display: block;
+    margin-top: 10px;
+  }
+  input, button {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+  }
