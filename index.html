@@ -1,154 +1,140 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Imperialist Competitive Algorithm - ICA</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      margin: 0;
-    }
-    #controls {
-      width: 25%;
-      padding: 20px;
-      background: #f5f5f5;
-    }
-    #canvas {
-      border: 1px solid #ccc;
-      background-color: #fff;
-    }
-    label {
-      display: block;
-      margin-top: 10px;
-    }
-    input, button {
-      width: 100%;
-      padding: 8px;
-      margin-top: 5px;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Imperialist Competitive Algorithm - ICA</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Custom CSS file -->
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <div id="controls">
-    <h2>ICA Parameters</h2>
-    <label for="numCountries">Number of Countries</label>
-    <input type="number" id="numCountries" value="30">
+<body class="bg-gradient-to-br from-purple-50 to-indigo-100 min-h-screen flex items-center justify-center p-4">
+    <!-- Main container for the application -->
+    <div class="flex flex-col lg:flex-row items-center justify-center p-4 gap-8 w-full max-w-6xl">
 
-    <label for="numEmpires">Number of Empires</label>
-    <input type="number" id="numEmpires" value="5">
+        <!-- Controls Panel -->
+        <div id="controls" class="bg-white p-8 rounded-xl shadow-2xl flex flex-col gap-6 w-full lg:w-1/3 max-w-md border border-gray-200">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4 text-center">ICA Parameters</h2>
 
-    <label for="iterations">Iterations</label>
-    <input type="number" id="iterations" value="100">
+            <div class="flex flex-col gap-2">
+                <label for="objectiveFunction" class="text-lg font-medium text-gray-700">Hàm Mục tiêu:</label>
+                <select id="objectiveFunction" class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm">
+                    <option value="sphere">Sphere Function</option>
+                    <option value="rastrigin">Rastrigin Function</option>
+                    <option value="rosenbrock">Rosenbrock Function</option>
+                </select>
+            </div>
 
-    <button onclick="startICA()">Start ICA</button>
-  </div>
+            <div class="flex flex-col gap-2">
+                <label for="numCountries" class="text-lg font-medium text-gray-700">Tổng số Quốc gia:</label>
+                <input
+                    type="number"
+                    id="numCountries"
+                    value="100"
+                    min="20"
+                    max="500"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
+                />
+            </div>
 
-  <canvas id="canvas" width="800" height="600"></canvas>
+            <div class="flex flex-col gap-2">
+                <label for="numImperialists" class="text-lg font-medium text-gray-700">Số lượng Đế quốc:</label>
+                <input
+                    type="number"
+                    id="numImperialists"
+                    value="10"
+                    min="2"
+                    max="50"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
+                />
+            </div>
 
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+            <div class="flex flex-col gap-2">
+                <label for="iterations" class="text-lg font-medium text-gray-700">Số vòng lặp:</label>
+                <input
+                    type="number"
+                    id="iterations"
+                    value="200"
+                    min="50"
+                    max="1000"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
+                />
+            </div>
 
-    class Country {
-      constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.cost = this.evaluate();
-      }
+            <div class="flex flex-col gap-2">
+                <label for="assimilationCoefficient" class="text-lg font-medium text-gray-700">Hệ số Đồng hóa (Beta):</label>
+                <input
+                    type="number"
+                    id="assimilationCoefficient"
+                    value="1.5"
+                    step="0.1"
+                    min="0.5"
+                    max="3.0"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
+                />
+            </div>
 
-      evaluate() {
-        // Sphere function
-        return (this.x ** 2 + this.y ** 2);
-      }
-    }
+            <div class="flex flex-col gap-2">
+                <label for="revolutionRate" class="text-lg font-medium text-gray-700">Tỷ lệ Cách mạng:</label>
+                <input
+                    type="number"
+                    id="revolutionRate"
+                    value="0.05"
+                    step="0.01"
+                    min="0.0"
+                    max="0.2"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
+                />
+            </div>
 
-    class Empire {
-      constructor(imperialist) {
-        this.imperialist = imperialist;
-        this.colonies = [];
-      }
+            <div class="flex flex-col gap-2">
+                <label for="revolutionMagnitude" class="text-lg font-medium text-gray-700">Độ lớn Cách mạng:</label>
+                <input
+                    type="number"
+                    id="revolutionMagnitude"
+                    value="0.1"
+                    step="0.01"
+                    min="0.01"
+                    max="0.5"
+                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
+                />
+            </div>
 
-      assimilate() {
-        this.colonies = this.colonies.map(colony => {
-          let dx = this.imperialist.x - colony.x;
-          let dy = this.imperialist.y - colony.y;
-          colony.x += dx * 0.1 * Math.random();
-          colony.y += dy * 0.1 * Math.random();
-          colony.cost = colony.evaluate();
-          return colony;
-        });
-      }
-    }
+            <button
+                onclick="startICA()"
+                class="bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-all duration-300 ease-in-out shadow-md hover:shadow-lg transform hover:scale-105 text-xl font-semibold mt-4"
+            >
+                Bắt đầu Mô phỏng ICA
+            </button>
 
-    let countries = [], empires = [], iter = 0, maxIter = 100;
+            <!-- Message display area -->
+            <div id="messageBox" class="mt-4 p-3 bg-purple-100 text-purple-800 rounded-lg hidden" role="alert">
+                <!-- Messages will be displayed here -->
+            </div>
+        </div>
 
-    function startICA() {
-      const numCountries = +document.getElementById('numCountries').value;
-      const numEmpires = +document.getElementById('numEmpires').value;
-      maxIter = +document.getElementById('iterations').value;
+        <!-- Visualization Area -->
+        <div class="flex flex-col gap-8 w-full lg:w-2/3 max-w-2xl">
+            <!-- ICA Simulation Canvas -->
+            <div class="bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex items-center justify-center p-4">
+                <canvas id="icaCanvas" width="800" height="600" class="block"></canvas>
+            </div>
 
-      countries = [];
-      empires = [];
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+            <!-- Current Phase Indicator -->
+            <div id="phaseIndicator" class="bg-white p-4 rounded-xl shadow-md border border-gray-200 text-center text-xl font-semibold text-gray-700">
+                Giai đoạn hiện tại: <span id="currentPhase" class="text-purple-600">N/A</span>
+            </div>
 
-      for (let i = 0; i < numCountries; i++) {
-        countries.push(new Country(Math.random() * 800 - 400, Math.random() * 600 - 300));
-      }
+            <!-- Convergence Plot Canvas -->
+            <div class="bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex items-center justify-center p-4">
+                <h3 class="text-xl font-bold text-gray-800 mb-2 text-center w-full">Biểu đồ Hội tụ (Chi phí Tốt nhất)</h3>
+                <canvas id="convergencePlotCanvas" width="800" height="300" class="block"></canvas>
+            </div>
+        </div>
+    </div>
 
-      countries.sort((a, b) => a.cost - b.cost);
-
-      for (let i = 0; i < numEmpires; i++) {
-        empires.push(new Empire(countries[i]));
-      }
-
-      let colonies = countries.slice(numEmpires);
-      colonies.forEach((colony, i) => {
-        empires[i % numEmpires].colonies.push(colony);
-      });
-
-      iter = 0;
-      requestAnimationFrame(runICA);
-    }
-
-    function runICA() {
-      if (iter >= maxIter) return;
-
-      empires.forEach(empire => empire.assimilate());
-
-      empires.sort((a, b) => a.imperialist.cost - b.imperialist.cost);
-
-      let weakest = empires[empires.length - 1];
-      let strongest = empires[0];
-
-      if (weakest.colonies.length > 0) {
-        let lostColony = weakest.colonies.pop();
-        strongest.colonies.push(lostColony);
-      } else {
-        empires.pop();
-      }
-
-      drawAll();
-      iter++;
-      requestAnimationFrame(runICA);
-    }
-
-    function drawAll() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      empires.forEach((empire, i) => {
-        ctx.fillStyle = `hsl(${i * 60}, 70%, 50%)`;
-        ctx.beginPath();
-        ctx.arc(empire.imperialist.x + 400, empire.imperialist.y + 300, 12, 0, 2 * Math.PI);
-        ctx.fill();
-
-        empire.colonies.forEach(colony => {
-          ctx.beginPath();
-          ctx.arc(colony.x + 400, colony.y + 300, 7, 0, 2 * Math.PI);
-          ctx.fill();
-        });
-      });
-    }
-  </script>
+    <!-- Main JavaScript file -->
+    <script src="script.js"></script>
 </body>
 </html>

@@ -1,23 +1,14 @@
+/* Custom font import for Inter */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+/* Apply Inter font globally and ensure canvas is block for proper layout */
 body {
-    font-family: Arial, sans-serif;
-    display: flex;
-    margin: 0;
-  }
-  #controls {
-    width: 25%;
-    padding: 20px;
-    background: #f5f5f5;
-  }
-  #canvas {
-    border: 1px solid #ccc;
-    background-color: #fff;
-  }
-  label {
-    display: block;
-    margin-top: 10px;
-  }
-  input, button {
-    width: 100%;
-    padding: 8px;
-    margin-top: 5px;
-  }
+    font-family: 'Inter', sans-serif;
+}
+canvas {
+    display: block; /* Ensures canvas behaves like a block element for layout */
+    max-width: 100%; /* Makes canvas responsive */
+    height: auto; /* Maintains aspect ratio */
+    border-radius: 0.75rem; /* rounded-xl for canvas */
+    background-color: #fff; /* Ensure canvas background is white */
+}
