@@ -1,14 +1,148 @@
-/* Custom font import for Inter */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-
-/* Apply Inter font globally and ensure canvas is block for proper layout */
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
 }
+
+.container {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 1200px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+h1, h2 {
+    color: #333;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+}
+
+.param-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.param-group label {
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+
+.param-group input[type="number"],
+.param-group select {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 1rem;
+}
+
+.param-group small {
+    font-size: 0.8em;
+    color: #777;
+    margin-top: 3px;
+}
+
+.param-group button {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+    margin-top: 10px;
+}
+
+#startButton {
+    background-color: #28a745;
+    color: white;
+}
+
+#startButton:hover {
+    background-color: #218838;
+}
+
+#resetButton {
+    background-color: #007bff;
+    color: white;
+}
+
+#resetButton:hover {
+    background-color: #0056b3;
+}
+
+.info-panel {
+    background-color: #e9ecef;
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #333;
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.visualization-area {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    gap: 20px;
+}
+
+.canvas-container {
+    flex: 1;
+    min-width: 400px;
+    max-width: 550px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #fafafa;
+}
+
 canvas {
-    display: block; /* Ensures canvas behaves like a block element for layout */
-    max-width: 100%; /* Makes canvas responsive */
-    height: auto; /* Maintains aspect ratio */
-    border-radius: 0.75rem; /* rounded-xl for canvas */
-    background-color: #fff; /* Ensure canvas background is white */
+    display: block;
+    width: 100%;
+    height: 400px; /* Chiều cao cố định cho canvas */
+    background-color: #fff;
+    border-top: 1px solid #eee;
+}
+
+@media (max-width: 768px) {
+    .controls {
+        grid-template-columns: 1fr;
+    }
+    .visualization-area {
+        flex-direction: column;
+        align-items: center;
+    }
+    .canvas-container {
+        width: 95%;
+        min-width: unset;
+        max-width: unset;
+    }
 }

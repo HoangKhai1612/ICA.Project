@@ -1,627 +1,619 @@
-// Get canvas elements and their contexts
-const icaCanvas = document.getElementById('icaCanvas');
-const icaCtx = icaCanvas.getContext('2d');
+// script.js (Cải tiến và sửa lỗi cho ICA)
+
+// --- Canvas Setup ---
+const optimizationCanvas = document.getElementById('optimizationCanvas');
+const optCtx = optimizationCanvas.getContext('2d');
 const convergencePlotCanvas = document.getElementById('convergencePlotCanvas');
-const plotCtx = convergencePlotCanvas.getContext('2d');
-const messageBox = document.getElementById('messageBox');
-const currentPhaseSpan = document.getElementById('currentPhase');
+const convCtx = convergencePlotCanvas.getContext('2d');
 
-// Global variables for the simulation state
-let countries = []; // Array to hold all country objects (imperialists + colonies)
-let imperialists = []; // Array to hold Imperialist objects
-let globalBestCountry = null; // Stores the best country found across all iterations
-let currentIteration = 0; // Current iteration count
-let maxIterations = 200; // Maximum number of iterations for the simulation
-let animationFrameId = null; // To store the ID of the animation frame for cancellation
-let bestCostsHistory = []; // To store best cost at each iteration for the plot
+// --- DOM Elements for Info and Controls ---
+const numCountriesInput = document.getElementById('numCountries');
+const numImperialistsInput = document.getElementById('numImperialists');
+const maxIterationsInput = document.getElementById('maxIterations');
+const dimensionsInput = document.getElementById('dimensions');
+const searchRangeMinInput = document.getElementById('searchRangeMin');
+const searchRangeMaxInput = document.getElementById('searchRangeMax');
+const assimilationCoefficientInput = document.getElementById('assimilationCoefficient');
+const revolutionRateInput = document.getElementById('revolutionRate');
+const revolutionAmountInput = document.getElementById('revolutionAmount'); // New input
+const imperialistDecayRateInput = document.getElementById('imperialistDecayRate'); // New input
+const unificationThresholdInput = document.getElementById('unificationThreshold'); // New input
+const startButton = document.getElementById('startButton');
+const resetButton = document.getElementById('resetButton');
+const currentIterationSpan = document.getElementById('currentIteration');
+const bestCostSpan = document.getElementById('bestCost');
+const bestPositionSpan = document.getElementById('bestPosition');
+const numActiveImperialistsSpan = document.getElementById('numActiveImperialists');
 
-// Objective function selection
-let selectedObjectiveFunction = 'sphere'; // Default
+// --- Global Simulation Variables ---
+let imperialists = []; // Array of imperialist objects {leader: Country, colonies: Country[]}
+let globalBestCountry = null;
+let currentIteration = 0;
+let animationFrameId = null; // To control the animation loop
+let convergenceHistory = []; // To store best costs over iterations
 
-// Parameters for ICA algorithm
-let numCountries = 100;
-let numImperialists = 10;
-let assimilationCoefficient = 1.5; // Beta in ICA
-let revolutionRate = 0.05; // Probability of revolution
-let revolutionMagnitude = 0.1; // Magnitude of revolution
-const maxVelocity = 10; // Max velocity for countries
+// --- Simulation Parameters (Default values from your document or typical ICA) ---
+let NUM_COUNTRIES = 50;
+let NUM_IMPERIALISTS = 5;
+let MAX_ITERATIONS = 1000;
+let DIMENSIONS = 2; // For visual representation, we'll mostly use 2D
+let SEARCH_RANGE_MIN = -5.12;
+let SEARCH_RANGE_MAX = 5.12;
 
-// Define objective functions
-const objectiveFunctions = {
-    sphere: {
-        func: (x, y) => x * x + y * y,
-        minima: { x: 0, y: 0, z: 0 },
-        range: { x: [-400, 400], y: [-300, 300] }
+// ICA specific parameters
+let ASSIMILATION_COEFFICIENT = 1.5; // beta (assimilation factor)
+let REVOLUTION_RATE = 0.1; // Probability of a colony undergoing revolution
+let REVOLUTION_AMOUNT = 0.1; // Zeta (percentage of search range for revolution)
+let IMPERIALIST_DECAY_RATE = 0.02; // Power decay rate for imperialists
+let UNIFICATION_THRESHOLD = 0.05; // Threshold for imperialists to unify based on distance
+
+// --- Benchmark Function: Rastrigin ---
+const benchmarkFunction = {
+    func: (position) => {
+        const A = 10;
+        return A * position.length + position.reduce((sum, val) => sum + (val * val - A * Math.cos(2 * Math.PI * val)), 0);
     },
-    rastrigin: {
-        func: (x, y) => {
-            const A = 10;
-            return A * 2 + (x * x - A * Math.cos(2 * Math.PI * x)) + (y * y - A * Math.cos(2 * Math.PI * y));
-        },
-        minima: { x: 0, y: 0, z: 0 },
-        range: { x: [-200, 200], y: [-150, 150] } // Adjusted range for visualization
-    },
-    rosenbrock: {
-        func: (x, y) => 100 * Math.pow((y - x * x), 2) + Math.pow((1 - x), 2),
-        minima: { x: 1, y: 1, z: 0 },
-        range: { x: [-200, 200], y: [-150, 150] } // Adjusted range for visualization
-    }
+    min: 0, // Global minimum for Rastrigin
+    minPos: (dim) => Array(dim).fill(0) // Position of global minimum
 };
 
-// Set canvas dimensions dynamically for responsiveness
-function resizeCanvases() {
-    // ICA Canvas
-    icaCanvas.width = Math.min(window.innerWidth * 0.8, 800);
-    icaCanvas.height = Math.min(window.innerHeight * 0.7, 600);
-    // Convergence Plot Canvas
-    convergencePlotCanvas.width = Math.min(window.innerWidth * 0.8, 800);
-    convergencePlotCanvas.height = Math.min(window.innerHeight * 0.3, 300);
+// --- Helper Functions ---
 
-    if (countries.length > 0) {
-        drawCountries();
-        drawConvergencePlot();
-    }
+// Maps a value from one range to another for canvas drawing
+function mapRange(value, inMin, inMax, outMin, outMax) {
+    return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
 }
 
-// Call resizeCanvases initially and on window resize
-window.addEventListener('resize', resizeCanvases);
-resizeCanvases(); // Initial call
+// Generates a random number within a given range
+function getRandomArbitrary(min, max) {
+    return Math.random() * (max - min) + min;
+}
 
-/**
- * Class representing a single Country (solution) in the ICA algorithm.
- */
+// Clamps a value within a min/max range
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(value, max));
+}
+
+// Calculates the cost of a position using the selected benchmark function
+function calculateCost(position) {
+    return benchmarkFunction.func(position);
+}
+
+// Calculates Euclidean distance between two positions
+function euclideanDistance(pos1, pos2) {
+    let sumSq = 0;
+    for (let i = 0; i < pos1.length; i++) {
+        sumSq += Math.pow(pos1[i] - pos2[i], 2);
+    }
+    return Math.sqrt(sumSq);
+}
+
+// --- ICA Algorithm Logic ---
+
 class Country {
-    constructor(x, y) {
-        this.x = x;
-        this.y = y;
-        this.cost = this.evaluate();
-        this.velocity_x = Math.random() * 6 - 3; // For assimilation movement
-        this.velocity_y = Math.random() * 6 - 3;
-    }
-
-    /**
-     * Evaluates the objective function for the country's current position.
-     * @returns {number} The cost (fitness) value.
-     */
-    evaluate() {
-        return objectiveFunctions[selectedObjectiveFunction].func(this.x, this.y);
-    }
-
-    /**
-     * Moves the country based on its current velocity.
-     * Enforces boundary conditions.
-     */
-    move() {
-        this.x += this.velocity_x;
-        this.y += this.velocity_y;
-
-        const currentRange = objectiveFunctions[selectedObjectiveFunction].range;
-        const xMin = currentRange.x[0];
-        const xMax = currentRange.x[1];
-        const yMin = currentRange.y[0];
-        const yMax = currentRange.y[1];
-
-        if (this.x < xMin) {
-            this.x = xMin;
-            this.velocity_x *= -0.8; // Reflect with some damping
-        } else if (this.x > xMax) {
-            this.x = xMax;
-            this.velocity_x *= -0.8;
-        }
-
-        if (this.y < yMin) {
-            this.y = yMin;
-            this.velocity_y *= -0.8;
-        } else if (this.y > yMax) {
-            this.y = yMax;
-            this.velocity_y *= -0.8;
-        }
-
-        this.cost = this.evaluate();
+    constructor(dimensions, searchRangeMin, searchRangeMax) {
+        this.position = Array(dimensions).fill(0).map(() => getRandomArbitrary(searchRangeMin, searchRangeMax));
+        this.cost = calculateCost(this.position);
     }
 }
 
-/**
- * Class representing an Imperialist country.
- */
-class Imperialist extends Country {
-    constructor(country) {
-        super(country.x, country.y); // Inherit position and cost from a Country
-        this.colonies = []; // Array to hold Colony objects (Country instances)
-        this.totalPower = this.cost; // Initial power is its own cost
+function initializeICA() {
+    imperialists = [];
+    globalBestCountry = null;
+    convergenceHistory = [];
+
+    let allCountries = [];
+    for (let i = 0; i < NUM_COUNTRIES; i++) {
+        allCountries.push(new Country(DIMENSIONS, SEARCH_RANGE_MIN, SEARCH_RANGE_MAX));
     }
 
-    /**
-     * Adds a colony to this imperialist.
-     * @param {Country} colony - The colony to add.
-     */
-    addColony(colony) {
-        this.colonies.push(colony);
-        this.updateTotalPower();
+    // Sort all countries by cost (lower cost is better)
+    allCountries.sort((a, b) => a.cost - b.cost);
+
+    // Select imperialists from the best countries
+    for (let i = 0; i < NUM_IMPERIALISTS; i++) {
+        imperialists.push({
+            leader: allCountries[i],
+            colonies: [],
+            normalizedPower: 0 // Will be calculated dynamically
+        });
     }
 
-    /**
-     * Removes a colony from this imperialist.
-     * @param {Country} colony - The colony to remove.
-     */
-    removeColony(colony) {
-        this.colonies = this.colonies.filter(c => c !== colony);
-        this.updateTotalPower();
+    // Assign remaining countries as colonies
+    const coloniesToAssign = allCountries.slice(NUM_IMPERIALISTS);
+
+    // Calculate initial imperialist power for colony assignment
+    const imperialistCosts = imperialists.map(imp => imp.leader.cost);
+    const maxImpCost = Math.max(...imperialistCosts);
+    const minImpCost = Math.min(...imperialistCosts);
+    let totalNormalizedPower = 0;
+
+    imperialists.forEach(imp => {
+        // Power is inversely proportional to cost (lower cost = higher power)
+        // Normalize power: (MaxCost - CurrentCost) / (MaxCost - MinCost)
+        // Add a small epsilon to denominator to avoid division by zero if all costs are same
+        imp.normalizedPower = (maxImpCost - imp.leader.cost) / (maxImpCost - minImpCost + 1e-9);
+        totalNormalizedPower += imp.normalizedPower;
+    });
+
+    // Distribute colonies based on normalized power
+    let currentColonyIndex = 0;
+    if (totalNormalizedPower > 0) { // Avoid division by zero
+        imperialists.forEach(imp => {
+            const numColonies = Math.round(imp.normalizedPower / totalNormalizedPower * coloniesToAssign.length);
+            for (let j = 0; j < numColonies && currentColonyIndex < coloniesToAssign.length; j++) {
+                imp.colonies.push(coloniesToAssign[currentColonyIndex]);
+                currentColonyIndex++;
+            }
+        });
     }
 
-    /**
-     * Updates the total power of the imperialist based on its own cost and its colonies' costs.
-     * Lower cost means higher power.
-     */
-    updateTotalPower() {
-        // A common way to calculate total power: Imperialist's cost + mean cost of colonies
-        // Or simply sum of costs, and then invert for power (lower cost = higher power)
-        // Here, we use the inverse of cost for power, so lower cost -> higher power
-        let colonyCostsSum = this.colonies.reduce((sum, c) => sum + c.cost, 0);
-        let meanColonyCost = this.colonies.length > 0 ? colonyCostsSum / this.colonies.length : 0;
-        
-        // Total power is often defined as Imperialist's cost + a fraction of colonies' mean cost
-        // We'll use a simple sum of inverse costs for power (lower cost = higher power)
-        // Or, more simply, just the imperialist's own cost for ranking, as in some ICA variants.
-        // For simplicity in this visualization, let's just use the imperialist's cost for ranking.
-        // The competition phase will implicitly handle this.
-        // For power calculation, we'll use a normalized cost (lower is better)
-        this.totalPower = this.cost; // The imperialist's own cost determines its strength
+    // Assign any remaining colonies due to rounding to the strongest imperialist
+    while (currentColonyIndex < coloniesToAssign.length) {
+        let strongestImp = imperialists.reduce((prev, current) =>
+            (prev.leader.cost < current.leader.cost) ? prev : current
+        );
+        strongestImp.colonies.push(coloniesToAssign[currentColonyIndex]);
+        currentColonyIndex++;
+    }
+
+    // Initialize global best
+    updateGlobalBest();
+}
+
+function updateGlobalBest() {
+    let currentGlobalBestCost = Infinity;
+    let currentGlobalBestPosition = [];
+
+    imperialists.forEach(imp => {
+        if (imp.leader.cost < currentGlobalBestCost) {
+            currentGlobalBestCost = imp.leader.cost;
+            currentGlobalBestPosition = [...imp.leader.position];
+        }
+        imp.colonies.forEach(col => {
+            if (col.cost < currentGlobalBestCost) {
+                currentGlobalBestCost = col.cost;
+                currentGlobalBestPosition = [...col.position];
+            }
+        });
+    });
+
+    if (globalBestCountry === null || currentGlobalBestCost < globalBestCountry.cost) {
+        globalBestCountry = {
+            position: currentGlobalBestPosition,
+            cost: currentGlobalBestCost
+        };
     }
 }
 
-/**
- * Initializes and starts the ICA simulation.
- */
-function startICA() {
-    // Get parameters from UI inputs
-    selectedObjectiveFunction = document.getElementById('objectiveFunction').value;
-    numCountries = parseInt(document.getElementById('numCountries').value);
-    numImperialists = parseInt(document.getElementById('numImperialists').value);
-    maxIterations = parseInt(document.getElementById('iterations').value);
-    assimilationCoefficient = parseFloat(document.getElementById('assimilationCoefficient').value);
-    revolutionRate = parseFloat(document.getElementById('revolutionRate').value);
-    revolutionMagnitude = parseFloat(document.getElementById('revolutionMagnitude').value);
+function updateICA() {
+    // 1. Assimilation: Colonies move towards their Imperialist
+    imperialists.forEach(imp => {
+        imp.colonies.forEach(colony => {
+            for (let d = 0; d < DIMENSIONS; d++) {
+                // Direction vector from colony to imperialist
+                const direction = imp.leader.position[d] - colony.position[d];
+                // Update position: current + random * beta * direction
+                colony.position[d] += getRandomArbitrary(0, 1) * ASSIMILATION_COEFFICIENT * direction;
+                colony.position[d] = clamp(colony.position[d], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX);
+            }
+            colony.cost = calculateCost(colony.position);
+        });
+    });
 
-    // Validate inputs
-    if (isNaN(numCountries) || numCountries < 20 || numCountries > 500) {
-        showMessage('Vui lòng nhập tổng số quốc gia hợp lệ (20-500).', 'bg-red-100 text-red-800');
-        return;
+    // 2. Revolution: A random colony might undergo revolution
+    imperialists.forEach(imp => {
+        imp.colonies.forEach(colony => {
+            if (Math.random() < REVOLUTION_RATE) {
+                // Revolution: random jump within a percentage of the search range
+                const rangeWidth = SEARCH_RANGE_MAX - SEARCH_RANGE_MIN;
+                for (let d = 0; d < DIMENSIONS; d++) {
+                    colony.position[d] += getRandomArbitrary(-REVOLUTION_AMOUNT * rangeWidth, REVOLUTION_AMOUNT * rangeWidth);
+                    colony.position[d] = clamp(colony.position[d], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX);
+                }
+                colony.cost = calculateCost(colony.position);
+            }
+        });
+    });
+
+    // 3. Exchange positions of Imperialist and Colony
+    imperialists.forEach(imp => {
+        if (imp.colonies.length > 0) { // Ensure there are colonies to compare
+            const bestColony = imp.colonies.reduce((best, current) =>
+                (current.cost < best.cost) ? current : best
+            );
+
+            if (bestColony.cost < imp.leader.cost) {
+                // Colony becomes new Imperialist, old Imperialist becomes a colony
+                const tempLeader = imp.leader;
+                imp.leader = bestColony;
+                imp.colonies = imp.colonies.filter(c => c !== bestColony); // Remove new leader from colonies
+                imp.colonies.push(tempLeader); // Add old leader as a colony
+            }
+        }
+    });
+
+    // Update global best after potential exchanges
+    updateGlobalBest();
+
+    // 4. Imperialistic Competition
+    if (imperialists.length > 1) {
+        // Calculate total cost for each imperialist (leader cost + mean colony cost)
+        // Lower total cost means stronger imperialist
+        imperialists.forEach(imp => {
+            let totalColonyCost = imp.colonies.reduce((sum, col) => sum + col.cost, 0);
+            let meanColonyCost = imp.colonies.length > 0 ? totalColonyCost / imp.colonies.length : 0;
+            // The power of an empire is inversely related to its total cost.
+            // Decay rate determines how much colony cost contributes to overall empire cost.
+            imp.empireCost = imp.leader.cost + (meanColonyCost * IMPERIALIST_DECAY_RATE);
+        });
+
+        // Sort imperialists by their empire cost (lower cost is stronger)
+        imperialists.sort((a, b) => a.empireCost - b.empireCost);
+
+        const weakestImperialist = imperialists[imperialists.length - 1]; // The last one after sorting (weakest)
+        const strongestImperialist = imperialists[0]; // The first one after sorting (strongest)
+
+        // Transfer colonies from the weakest imperialist to others
+        if (weakestImperialist.colonies.length > 0) {
+            weakestImperialist.colonies.forEach(colony => {
+                // Calculate power for distribution amongst *all remaining* imperialists
+                const currentImperialistCosts = imperialists.map(imp => imp.leader.cost);
+                const currentMaxImpCost = Math.max(...currentImperialistCosts);
+                const currentMinImpCost = Math.min(...currentImperialistCosts);
+                let currentTotalNormalizedPower = 0;
+
+                imperialists.forEach(imp => {
+                    imp.normalizedPower = (currentMaxImpCost - imp.leader.cost) / (currentMaxImpCost - currentMinImpCost + 1e-9);
+                    currentTotalNormalizedPower += imp.normalizedPower;
+                });
+
+                if (currentTotalNormalizedPower > 0) {
+                    let randomVal = getRandomArbitrary(0, currentTotalNormalizedPower);
+                    let sumProb = 0;
+                    let targetImp = null;
+
+                    for (let i = 0; i < imperialists.length; i++) {
+                        sumProb += imperialists[i].normalizedPower;
+                        if (randomVal <= sumProb) {
+                            targetImp = imperialists[i];
+                            break;
+                        }
+                    }
+                    if (targetImp) {
+                        targetImp.colonies.push(colony);
+                    } else { // Fallback, assign to strongest if random didn't pick for some reason
+                        strongestImperialist.colonies.push(colony);
+                    }
+                } else { // If only one imperialist or all have same power, assign to strongest
+                    strongestImperialist.colonies.push(colony);
+                }
+            });
+            weakestImperialist.colonies = []; // Clear colonies of the weakest
+        }
+
+        // If weakest imperialist has no colonies and is not the last remaining imperialist, it collapses
+        if (weakestImperialist.colonies.length === 0 && imperialists.length > 1) {
+            strongestImperialist.colonies.push(weakestImperialist.leader); // Absorbed as a colony
+            imperialists = imperialists.filter(imp => imp !== weakestImperialist); // Remove the collapsed imperialist
+        }
     }
-    if (isNaN(numImperialists) || numImperialists < 2 || numImperialists >= numCountries) {
-        showMessage('Vui lòng nhập số lượng đế quốc hợp lệ (2 đến < tổng số quốc gia).', 'bg-red-100 text-red-800');
-        return;
+
+    // 5. Empire Unification (simplified)
+    // If two imperialists are too close, the weaker one collapses into the stronger one.
+    if (imperialists.length > 1) {
+        for (let i = 0; i < imperialists.length; i++) {
+            for (let j = i + 1; j < imperialists.length; j++) {
+                const imp1 = imperialists[i];
+                const imp2 = imperialists[j];
+                const searchRangeLength = SEARCH_RANGE_MAX - SEARCH_RANGE_MIN;
+                const distance = euclideanDistance(imp1.leader.position, imp2.leader.position);
+
+                if (distance < UNIFICATION_THRESHOLD * searchRangeLength) {
+                    // Decide which one is stronger based on leader cost (lower is stronger)
+                    let strongerImp = imp1.leader.cost < imp2.leader.cost ? imp1 : imp2;
+                    let weakerImp = strongerImp === imp1 ? imp2 : imp1;
+
+                    // Transfer all colonies (including the weaker leader) to the stronger empire
+                    strongerImp.colonies = strongerImp.colonies.concat(weakerImp.colonies);
+                    strongerImp.colonies.push(weakerImp.leader);
+
+                    // Remove the weaker empire from the list
+                    imperialists = imperialists.filter(imp => imp !== weakerImp);
+                    break; // Break inner loop, as the list of imperialists has changed
+                }
+            }
+        }
     }
-    if (isNaN(maxIterations) || maxIterations < 50 || maxIterations > 1000) {
-        showMessage('Vui lòng nhập số vòng lặp hợp lệ (50-1000).', 'bg-red-100 text-red-800');
-        return;
-    }
-    if (isNaN(assimilationCoefficient) || assimilationCoefficient < 0.5 || assimilationCoefficient > 3.0) {
-        showMessage('Hệ số Đồng hóa (Beta) phải nằm trong khoảng 0.5-3.0.', 'bg-red-100 text-red-800');
-        return;
-    }
-    if (isNaN(revolutionRate) || revolutionRate < 0.0 || revolutionRate > 0.2) {
-        showMessage('Tỷ lệ Cách mạng phải nằm trong khoảng 0.0-0.2.', 'bg-red-100 text-red-800');
-        return;
-    }
-    if (isNaN(revolutionMagnitude) || revolutionMagnitude < 0.01 || revolutionMagnitude > 0.5) {
-        showMessage('Độ lớn Cách mạng phải nằm trong khoảng 0.01-0.5.', 'bg-red-100 text-red-800');
+}
+
+
+// --- Drawing Functions ---
+
+function resizeCanvases() {
+    optimizationCanvas.width = optimizationCanvas.parentElement.clientWidth;
+    optimizationCanvas.height = 400; // Keep height fixed
+    convergencePlotCanvas.width = convergencePlotCanvas.parentElement.clientWidth;
+    convergencePlotCanvas.height = 400; // Keep height fixed
+    drawOptimizationSpace(); // Redraw immediately after resize
+    drawConvergencePlot();
+}
+
+function drawOptimizationSpace() {
+    if (DIMENSIONS !== 2) {
+        optCtx.clearRect(0, 0, optimizationCanvas.width, optimizationCanvas.height);
+        optCtx.fillStyle = '#f0f0f0';
+        optCtx.fillRect(0, 0, optimizationCanvas.width, optimizationCanvas.height);
+        optCtx.font = '20px Arial';
+        optCtx.fillStyle = '#555';
+        optCtx.textAlign = 'center';
+        optCtx.fillText('Trực quan hóa chỉ khả dụng cho 2D', optimizationCanvas.width / 2, optimizationCanvas.height / 2);
         return;
     }
 
-    // Clear any previous animation frame to prevent multiple loops running
+    optCtx.clearRect(0, 0, optimizationCanvas.width, optimizationCanvas.height);
+
+    // Draw background based on function cost (Rastrigin)
+    const gridSize = 50; // Smaller value = more detail, slower rendering
+    const cellWidth = optimizationCanvas.width / gridSize;
+    const cellHeight = optimizationCanvas.height / gridSize;
+
+    // Determine min/max cost for visualization color mapping
+    const vizMaxCost = benchmarkFunction.func(Array(DIMENSIONS).fill(SEARCH_RANGE_MAX)); // Rough estimate for Rastrigin's max in range
+    const vizMinCost = benchmarkFunction.min;
+
+    for (let i = 0; i < gridSize; i++) {
+        for (let j = 0; j < gridSize; j++) {
+            const x = mapRange(i, 0, gridSize, SEARCH_RANGE_MIN, SEARCH_RANGE_MAX);
+            const y = mapRange(j, 0, gridSize, SEARCH_RANGE_MIN, SEARCH_RANGE_MAX);
+            const cost = calculateCost([x, y]);
+
+            const normalizedCost = clamp(cost, vizMinCost, vizMaxCost) / (vizMaxCost - vizMinCost + 1e-9); // Add epsilon
+            const colorVal = Math.floor(normalizedCost * 255);
+            // Using a purple scale for ICA
+            optCtx.fillStyle = `rgb(${255 - colorVal}, ${200 - colorVal * 0.5}, ${255 - colorVal})`; // Lighter for lower cost
+            optCtx.fillRect(i * cellWidth, optimizationCanvas.height - (j * cellHeight) - cellHeight, cellWidth, cellHeight);
+        }
+    }
+
+    // Draw colonies (chấm tím nhạt)
+    imperialists.forEach(imp => {
+        imp.colonies.forEach(colony => {
+            const drawX = mapRange(colony.position[0], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX, 0, optimizationCanvas.width);
+            const drawY = mapRange(colony.position[1], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX, optimizationCanvas.height, 0);
+
+            optCtx.beginPath();
+            optCtx.arc(drawX, drawY, 4, 0, Math.PI * 2);
+            optCtx.fillStyle = '#A020F0'; // Light purple
+            optCtx.fill();
+            optCtx.strokeStyle = '#800080'; // Darker purple
+            optCtx.lineWidth = 1;
+            optCtx.stroke();
+        });
+    });
+
+    // Draw imperialists (chấm tím đậm hơn, lớn hơn)
+    imperialists.forEach(imp => {
+        const drawX = mapRange(imp.leader.position[0], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX, 0, optimizationCanvas.width);
+        const drawY = mapRange(imp.leader.position[1], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX, optimizationCanvas.height, 0);
+
+        optCtx.beginPath();
+        optCtx.arc(drawX, drawY, 7, 0, Math.PI * 2);
+        optCtx.fillStyle = '#800080'; // Dark purple
+        optCtx.fill();
+        optCtx.strokeStyle = '#4B0082'; // Indigo
+        optCtx.lineWidth = 2;
+        optCtx.stroke();
+    });
+
+    // Draw global best country (chấm vàng sáng nhất, lớn nhất)
+    if (globalBestCountry && globalBestCountry.position.length === 2) {
+        const drawX = mapRange(globalBestCountry.position[0], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX, 0, optimizationCanvas.width);
+        const drawY = mapRange(globalBestCountry.position[1], SEARCH_RANGE_MIN, SEARCH_RANGE_MAX, optimizationCanvas.height, 0);
+
+        optCtx.beginPath();
+        optCtx.arc(drawX, drawY, 10, 0, Math.PI * 2);
+        optCtx.fillStyle = '#FFD700'; // Gold
+        optCtx.fill();
+        optCtx.strokeStyle = '#DAA520'; // Goldenrod
+        optCtx.lineWidth = 3;
+        optCtx.stroke();
+        optCtx.closePath();
+
+        // Draw a small cross for target
+        optCtx.beginPath();
+        optCtx.moveTo(drawX - 12, drawY);
+        optCtx.lineTo(drawX + 12, drawY);
+        optCtx.moveTo(drawX, drawY - 12);
+        optCtx.lineTo(drawX, drawY + 12);
+        optCtx.strokeStyle = 'black';
+        optCtx.lineWidth = 1;
+        optCtx.stroke();
+    }
+}
+
+function drawConvergencePlot() {
+    convCtx.clearRect(0, 0, convergencePlotCanvas.width, convergencePlotCanvas.height);
+
+    if (convergenceHistory.length === 0) {
+        convCtx.font = '20px Arial';
+        convCtx.fillStyle = '#555';
+        convCtx.textAlign = 'center';
+        convCtx.fillText('Chưa có dữ liệu để vẽ biểu đồ', convergencePlotCanvas.width / 2, convergencePlotCanvas.height / 2);
+        return;
+    }
+
+    const padding = 40;
+    const chartWidth = convergencePlotCanvas.width - 2 * padding;
+    const chartHeight = convergencePlotCanvas.height - 2 * padding;
+
+    let maxCost = Math.max(...convergenceHistory);
+    let minCost = Math.min(...convergenceHistory);
+    const costRange = maxCost - minCost > 1e-9 ? maxCost - minCost : 1; // Prevent division by zero if cost is constant
+
+    // Draw axes
+    convCtx.strokeStyle = '#888';
+    convCtx.lineWidth = 1;
+    convCtx.beginPath();
+    convCtx.moveTo(padding, padding);
+    convCtx.lineTo(padding, padding + chartHeight);
+    convCtx.lineTo(padding + chartWidth, padding + chartHeight);
+    convCtx.stroke();
+
+    // Draw axis labels
+    convCtx.fillStyle = '#555';
+    convCtx.font = '12px Arial';
+    convCtx.textAlign = 'center';
+    convCtx.fillText('Vòng lặp', padding + chartWidth / 2, convergencePlotCanvas.height - 10);
+    convCtx.save();
+    convCtx.translate(15, padding + chartHeight / 2);
+    convCtx.rotate(-Math.PI / 2);
+    convCtx.fillText('Chi phí tốt nhất', 0, 0);
+    convCtx.restore();
+
+    // Draw tick marks and values
+    // Y-axis (Cost)
+    for (let i = 0; i <= 5; i++) {
+        const y = padding + chartHeight - (i / 5) * chartHeight;
+        const value = minCost + (i / 5) * costRange;
+        convCtx.fillText(value.toExponential(2), padding - 10, y + 4); // Use scientific notation
+        convCtx.beginPath();
+        convCtx.moveTo(padding, y);
+        convCtx.lineTo(padding - 5, y);
+        convCtx.stroke();
+    }
+
+    // X-axis (Iterations)
+    const numTicksX = Math.min(5, convergenceHistory.length - 1); // Max 5 ticks
+    for (let i = 0; i <= numTicksX; i++) {
+        const x = padding + (i / numTicksX) * chartWidth;
+        const value = Math.floor((i / numTicksX) * (convergenceHistory.length - 1));
+        convCtx.fillText(value, x, padding + chartHeight + 15);
+        convCtx.beginPath();
+        convCtx.moveTo(x, padding + chartHeight);
+        convCtx.lineTo(x, padding + chartHeight + 5);
+        convCtx.stroke();
+    }
+
+    // Draw the convergence line
+    convCtx.beginPath();
+    convCtx.strokeStyle = '#800080'; // Dark purple line for ICA
+    convCtx.lineWidth = 2;
+
+    convergenceHistory.forEach((cost, index) => {
+        const x = mapRange(index, 0, MAX_ITERATIONS - 1, padding, padding + chartWidth);
+        const y = mapRange(cost, minCost, maxCost, padding + chartHeight, padding); // Invert Y for canvas
+
+        if (index === 0) {
+            convCtx.moveTo(x, y);
+        } else {
+            convCtx.lineTo(x, y);
+        }
+    });
+    convCtx.stroke();
+}
+
+// --- Main Simulation Loop ---
+let lastFrameTime = 0;
+const frameRate = 30; // Aim for 30 frames per second
+const frameInterval = 1000 / frameRate;
+
+function animate(currentTime) {
+    animationFrameId = requestAnimationFrame(animate);
+
+    const elapsed = currentTime - lastFrameTime;
+
+    if (elapsed > frameInterval) {
+        lastFrameTime = currentTime - (elapsed % frameInterval);
+
+        if (currentIteration < MAX_ITERATIONS && imperialists.length > 0) {
+            updateICA();
+            convergenceHistory.push(globalBestCountry.cost); // Store for plotting
+
+            // Update UI
+            currentIterationSpan.textContent = currentIteration;
+            bestCostSpan.textContent = globalBestCountry.cost.toExponential(4);
+            bestPositionSpan.textContent = `[${globalBestCountry.position.map(val => val.toFixed(4)).join(', ')}]`;
+            numActiveImperialistsSpan.textContent = imperialists.length;
+
+            drawOptimizationSpace();
+            drawConvergencePlot();
+
+            currentIteration++;
+        } else {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+            startButton.textContent = 'Mô phỏng hoàn tất';
+            startButton.disabled = true;
+        }
+    }
+}
+
+function startSimulation() {
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
     }
 
-    // Reset simulation state
-    countries = [];
-    imperialists = [];
-    globalBestCountry = null;
-    currentIteration = 0;
-    bestCostsHistory = [];
-    icaCtx.clearRect(0, 0, icaCanvas.width, icaCanvas.height);
-    plotCtx.clearRect(0, 0, convergencePlotCanvas.width, convergencePlotCanvas.height);
+    // Get parameters from UI and validate
+    NUM_COUNTRIES = parseInt(numCountriesInput.value);
+    NUM_IMPERIALISTS = parseInt(numImperialistsInput.value);
+    MAX_ITERATIONS = parseInt(maxIterationsInput.value);
+    DIMENSIONS = parseInt(dimensionsInput.value);
+    SEARCH_RANGE_MIN = parseFloat(searchRangeMinInput.value);
+    SEARCH_RANGE_MAX = parseFloat(searchRangeMaxInput.value);
+    ASSIMILATION_COEFFICIENT = parseFloat(assimilationCoefficientInput.value);
+    REVOLUTION_RATE = parseFloat(revolutionRateInput.value);
+    REVOLUTION_AMOUNT = parseFloat(revolutionAmountInput.value);
+    IMPERIALIST_DECAY_RATE = parseFloat(imperialistDecayRateInput.value);
+    UNIFICATION_THRESHOLD = parseFloat(unificationThresholdInput.value);
 
-    // 1. Initialization
-    currentPhaseSpan.textContent = "Khởi tạo";
-    const currentRange = objectiveFunctions[selectedObjectiveFunction].range;
-    const xMin = currentRange.x[0];
-    const xMax = currentRange.x[1];
-    const yMin = currentRange.y[0];
-    const yMax = currentRange.y[1];
-
-    for (let i = 0; i < numCountries; i++) {
-        let x = Math.random() * (xMax - xMin) + xMin;
-        let y = Math.random() * (yMax - yMin) + yMin;
-        countries.push(new Country(x, y));
-    }
-
-    // Sort countries by cost to select imperialists
-    countries.sort((a, b) => a.cost - b.cost);
-
-    // Select imperialists and assign colonies
-    for (let i = 0; i < numImperialists; i++) {
-        imperialists.push(new Imperialist(countries[i]));
-    }
-
-    let colonies = countries.slice(numImperialists); // Remaining countries are colonies
-
-    // Assign colonies to imperialists based on power (inverse of cost)
-    // Calculate normalized power for each imperialist
-    let imperialistCosts = imperialists.map(imp => imp.cost);
-    let maxImpCost = Math.max(...imperialistCosts);
-    let minImpCost = Math.min(...imperialistCosts);
-
-    let totalNormalizedPower = 0;
-    let normalizedPowers = imperialists.map(imp => {
-        // Normalize cost to be between 0 and 1 (0 is best, 1 is worst)
-        let normalizedCost = (imp.cost - minImpCost) / (maxImpCost - minImpCost + 1e-9); // Add epsilon to avoid division by zero
-        // Power is inverse of normalized cost (1 is best, 0 is worst)
-        let power = 1 - normalizedCost;
-        totalNormalizedPower += power;
-        return power;
-    });
-
-    // Assign colonies probabilistically
-    for (let i = 0; i < colonies.length; i++) {
-        let rand = Math.random() * totalNormalizedPower;
-        let cumulativePower = 0;
-        for (let j = 0; j < imperialists.length; j++) {
-            cumulativePower += normalizedPowers[j];
-            if (rand <= cumulativePower) {
-                imperialists[j].addColony(colonies[i]);
-                break;
-            }
-        }
-    }
-
-    globalBestCountry = imperialists[0]; // Assume the first imperialist is initially the best
-    imperialists.forEach(imp => {
-        if (imp.cost < globalBestCountry.cost) {
-            globalBestCountry = imp;
-        }
-        imp.colonies.forEach(col => {
-            if (col.cost < globalBestCountry.cost) {
-                globalBestCountry = col;
-            }
-        });
-    });
-
-    bestCostsHistory.push(globalBestCountry.cost); // Record initial best cost
-    showMessage('Mô phỏng ICA đã bắt đầu!', 'bg-green-100 text-green-800');
-
-    animationFrameId = requestAnimationFrame(runICA);
-}
-
-/**
- * Finds the best country (lowest cost) among all imperialists and colonies.
- * @returns {Country} The country with the lowest cost.
- */
-function getBestCountryOverall() {
-    let best = imperialists[0]; // Start with the first imperialist
-    imperialists.forEach(imp => {
-        if (imp.cost < best.cost) {
-            best = imp;
-        }
-        imp.colonies.forEach(col => {
-            if (col.cost < best.cost) {
-                best = col;
-            }
-        });
-    });
-    return best;
-}
-
-/**
- * The main simulation loop for the ICA algorithm.
- */
-function runICA() {
-    if (currentIteration >= maxIterations) {
-        showMessage(`Mô phỏng hoàn tất! Chi phí tốt nhất: ${globalBestCountry.cost.toFixed(6)} tại (${globalBestCountry.x.toFixed(2)}, ${globalBestCountry.y.toFixed(2)})`, 'bg-purple-100 text-purple-800');
+    if (isNaN(NUM_COUNTRIES) || NUM_COUNTRIES <= 0 ||
+        isNaN(NUM_IMPERIALISTS) || NUM_IMPERIALISTS <= 0 || NUM_IMPERIALISTS >= NUM_COUNTRIES ||
+        isNaN(MAX_ITERATIONS) || MAX_ITERATIONS <= 0 ||
+        isNaN(DIMENSIONS) || DIMENSIONS < 1 ||
+        isNaN(SEARCH_RANGE_MIN) || isNaN(SEARCH_RANGE_MAX) || SEARCH_RANGE_MIN >= SEARCH_RANGE_MAX) {
+        alert("Vui lòng nhập các tham số hợp lệ!");
         return;
     }
 
-    currentPhaseSpan.textContent = "Đồng hóa & Cách mạng";
+    // Reset simulation state
+    currentIteration = 0;
+    initializeICA(); // Re-initialize for a new run
+    startButton.textContent = 'Đang chạy...';
+    startButton.disabled = true;
+    resetButton.disabled = false;
 
-    // 2. Assimilation: Colonies move towards their Imperialist
-    imperialists.forEach(imp => {
-        imp.colonies.forEach(col => {
-            // Move colony towards imperialist
-            col.velocity_x = assimilationCoefficient * Math.random() * (imp.x - col.x);
-            col.velocity_y = assimilationCoefficient * Math.random() * (imp.y - col.y);
-            col.move();
-        });
-    });
+    animationFrameId = requestAnimationFrame(animate);
+}
 
-    // 3. Revolution: Randomly perturb some countries
-    imperialists.forEach(imp => {
-        // Revolution for imperialists
-        if (Math.random() < revolutionRate) {
-            const currentRange = objectiveFunctions[selectedObjectiveFunction].range;
-            const xRange = currentRange.x[1] - currentRange.x[0];
-            const yRange = currentRange.y[1] - currentRange.y[0];
-            imp.x += (Math.random() * 2 - 1) * revolutionMagnitude * xRange;
-            imp.y += (Math.random() * 2 - 1) * revolutionMagnitude * yRange;
-            imp.cost = imp.evaluate();
-            imp.move(); // Apply boundary checks
-        }
-        // Revolution for colonies
-        imp.colonies.forEach(col => {
-            if (Math.random() < revolutionRate) {
-                const currentRange = objectiveFunctions[selectedObjectiveFunction].range;
-                const xRange = currentRange.x[1] - currentRange.x[0];
-                const yRange = currentRange.y[1] - currentRange.y[0];
-                col.x += (Math.random() * 2 - 1) * revolutionMagnitude * xRange;
-                col.y += (Math.random() * 2 - 1) * revolutionMagnitude * yRange;
-                col.cost = col.evaluate();
-                col.move(); // Apply boundary checks
-            }
-        });
-    });
-
-    currentPhaseSpan.textContent = "Trao đổi vị trí & Cạnh tranh";
-
-    // 4. Exchange Position: Colony becomes better than its Imperialist
-    imperialists.forEach(imp => {
-        imp.colonies.forEach(col => {
-            if (col.cost < imp.cost) {
-                // Swap positions and costs
-                let tempX = imp.x, tempY = imp.y, tempCost = imp.cost;
-                imp.x = col.x; imp.y = col.y; imp.cost = col.cost;
-                col.x = tempX; col.y = tempY; col.cost = tempCost;
-
-                // Also update the Imperialist's total power
-                imp.updateTotalPower();
-            }
-        });
-    });
-
-    // Update global best country after assimilation and revolution
-    globalBestCountry = getBestCountryOverall();
-
-    // 5. Imperialistic Competition: Weaker imperialists are eliminated
-    // Sort imperialists by their cost (lower cost = stronger)
-    imperialists.sort((a, b) => a.cost - b.cost);
-
-    // Calculate total power of all imperialists (inverse of cost for power)
-    let totalPower = imperialists.reduce((sum, imp) => sum + (1 / imp.cost), 0); // Sum of 1/cost
-    if (totalPower === 0) totalPower = 1e-9; // Avoid division by zero
-
-    let imperialistSelectionProbabilities = imperialists.map(imp => (1 / imp.cost) / totalPower);
-
-    // If there's more than one imperialist, perform competition
-    if (imperialists.length > 1) {
-        let weakestImperialist = imperialists[imperialists.length - 1]; // The last one after sorting
-        let weakestColonyOfWeakestImp = weakestImperialist.colonies.length > 0 ?
-            weakestImperialist.colonies.reduce((a, b) => (a.cost > b.cost ? a : b)) : null;
-
-        // If the weakest imperialist has colonies, its weakest colony might be eliminated
-        // Or, a random colony from the weakest imperialist is chosen to be given to a stronger one.
-        // A common ICA competition rule: strongest imperialist takes a colony from the weakest.
-        // Or, the weakest imperialist loses its weakest colony.
-
-        // Let's implement: the weakest imperialist loses its weakest colony,
-        // which is then assigned to a stronger imperialist probabilistically.
-        if (weakestImperialist.colonies.length > 0) {
-            let colonyToRedistribute = weakestImperialist.colonies.pop(); // Remove weakest colony
-            weakestImperialist.updateTotalPower();
-
-            // Assign this colony to a new imperialist probabilistically
-            let rand = Math.random();
-            let cumulativeProb = 0;
-            for (let i = 0; i < imperialists.length; i++) {
-                cumulativeProb += imperialistSelectionProbabilities[i];
-                if (rand <= cumulativeProb || i === imperialists.length - 1) { // Ensure it's assigned
-                    imperialists[i].addColony(colonyToRedistribute);
-                    break;
-                }
-            }
-        } else {
-            // 6. Elimination of Powerless Imperialists
-            // If an imperialist has no colonies, it is eliminated.
-            // Its position (as a country) might be taken by the strongest imperialist's colony.
-            // For simplicity, we just remove it.
-            imperialists.pop(); // Remove the powerless imperialist
-        }
+function resetSimulation() {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = null;
     }
-    
-    // If only one imperialist remains, the algorithm converges
-    if (imperialists.length === 1 && currentIteration < maxIterations - 1) {
-        currentPhaseSpan.textContent = "Hội tụ (Chỉ còn 1 Đế quốc)";
-        // All other countries become colonies of this last imperialist
-        let remainingCountries = [];
-        imperialists[0].colonies.forEach(col => remainingCountries.push(col));
-        imperialists[0].colonies = []; // Clear current colonies
-        
-        countries.forEach(country => {
-            if (country !== imperialists[0] && !remainingCountries.includes(country)) {
-                remainingCountries.push(country);
-            }
-        });
+    currentIteration = 0;
+    imperialists = [];
+    globalBestCountry = null;
+    convergenceHistory = [];
 
-        remainingCountries.forEach(col => imperialists[0].addColony(col));
-        
-        // The last imperialist continues to assimilate its colonies
-        imperialists[0].colonies.forEach(col => {
-            col.velocity_x = assimilationCoefficient * Math.random() * (imperialists[0].x - col.x);
-            col.velocity_y = assimilationCoefficient * Math.random() * (imperialists[0].y - col.y);
-            col.move();
-        });
-    }
+    currentIterationSpan.textContent = '0';
+    bestCostSpan.textContent = 'N/A';
+    bestPositionSpan.textContent = 'N/A';
+    numActiveImperialistsSpan.textContent = 'N/A';
 
+    startButton.textContent = 'Bắt đầu mô phỏng';
+    startButton.disabled = false;
+    resetButton.disabled = true;
 
-    bestCostsHistory.push(globalBestCountry.cost); // Record best cost for plot
-    drawCountries();
+    drawOptimizationSpace();
     drawConvergencePlot();
-
-    currentIteration++;
-    animationFrameId = requestAnimationFrame(runICA);
 }
 
-/**
- * Draws all countries (imperialists and colonies) on the ICA canvas.
- */
-function drawCountries() {
-    icaCtx.clearRect(0, 0, icaCanvas.width, icaCanvas.height); // Clear the entire canvas
+// --- Event Listeners ---
+startButton.addEventListener('click', startSimulation);
+resetButton.addEventListener('click', resetSimulation);
+window.addEventListener('resize', resizeCanvases);
 
-    const currentMinima = objectiveFunctions[selectedObjectiveFunction].minima;
-    const currentRange = objectiveFunctions[selectedObjectiveFunction].range;
-
-    // Map objective function coordinates to canvas coordinates
-    const mapXToCanvas = (x) => {
-        return (x - currentRange.x[0]) / (currentRange.x[1] - currentRange.x[0]) * icaCanvas.width;
-    };
-    const mapYToCanvas = (y) => {
-        return (y - currentRange.y[0]) / (currentRange.y[1] - currentRange.y[0]) * icaCanvas.height;
-    };
-
-    // Draw the global minimum target
-    icaCtx.fillStyle = '#FFD700'; // Gold color for the target
-    icaCtx.beginPath();
-    icaCtx.arc(mapXToCanvas(currentMinima.x), mapYToCanvas(currentMinima.y), 12, 0, Math.PI * 2);
-    icaCtx.fill();
-    icaCtx.strokeStyle = '#DAA520'; // Darker gold for border
-    icaCtx.lineWidth = 2;
-    icaCtx.stroke();
-
-    // Draw connection lines from colonies to their imperialists
-    imperialists.forEach(imp => {
-        const impCanvasX = mapXToCanvas(imp.x);
-        const impCanvasY = mapYToCanvas(imp.y);
-        imp.colonies.forEach(col => {
-            const colCanvasX = mapXToCanvas(col.x);
-            const colCanvasY = mapYToCanvas(col.y);
-            icaCtx.strokeStyle = 'rgba(128, 0, 128, 0.3)'; // Purple transparent
-            icaCtx.lineWidth = 1;
-            icaCtx.beginPath();
-            icaCtx.moveTo(impCanvasX, impCanvasY);
-            icaCtx.lineTo(colCanvasX, colCanvasY);
-            icaCtx.stroke();
-        });
-    });
-
-    // Draw colonies
-    imperialists.forEach(imp => {
-        imp.colonies.forEach(col => {
-            icaCtx.fillStyle = '#8b5cf6'; // Purple-400 for colonies
-            icaCtx.beginPath();
-            icaCtx.arc(mapXToCanvas(col.x), mapYToCanvas(col.y), 5, 0, Math.PI * 2);
-            icaCtx.fill();
-            icaCtx.strokeStyle = '#6d28d9'; // Darker purple
-            icaCtx.lineWidth = 1.5;
-            icaCtx.stroke();
-        });
-    });
-
-    // Draw imperialists (larger, distinct color)
-    imperialists.forEach(imp => {
-        icaCtx.fillStyle = '#7c3aed'; // Purple-600 for imperialists
-        icaCtx.beginPath();
-        icaCtx.arc(mapXToCanvas(imp.x), mapYToCanvas(imp.y), 8, 0, Math.PI * 2);
-        icaCtx.fill();
-        icaCtx.strokeStyle = '#5b21b6'; // Darker purple
-        icaCtx.lineWidth = 2;
-        icaCtx.stroke();
-    });
-
-    // Highlight the global best country (largest, brightest color)
-    if (globalBestCountry) {
-        icaCtx.fillStyle = '#facc15'; // Yellow-400 for global best
-        icaCtx.beginPath();
-        icaCtx.arc(mapXToCanvas(globalBestCountry.x), mapYToCanvas(globalBestCountry.y), 10, 0, Math.PI * 2);
-        icaCtx.fill();
-        icaCtx.strokeStyle = '#eab308'; // Darker yellow
-        icaCtx.lineWidth = 2.5;
-        icaCtx.stroke();
-    }
-
-
-    // Display current iteration and best cost
-    icaCtx.fillStyle = '#333'; // Dark grey text
-    icaCtx.font = '18px Inter, sans-serif';
-    icaCtx.fillText(`Vòng lặp: ${currentIteration} / ${maxIterations}`, 10, 25);
-    if (globalBestCountry) {
-        icaCtx.fillText(`Chi phí tốt nhất: ${globalBestCountry.cost.toFixed(6)}`, 10, 50);
-        icaCtx.fillText(`Vị trí tốt nhất: (${globalBestCountry.x.toFixed(2)}, ${globalBestCountry.y.toFixed(2)})`, 10, 75);
-    }
-}
-
-/**
- * Draws the convergence plot.
- */
-function drawConvergencePlot() {
-    plotCtx.clearRect(0, 0, convergencePlotCanvas.width, convergencePlotCanvas.height);
-
-    if (bestCostsHistory.length < 2) return;
-
-    // Find min/max cost for scaling
-    const maxCost = Math.max(...bestCostsHistory);
-    const minCost = Math.min(...bestCostsHistory);
-
-    // Padding for the plot
-    const padding = 30;
-    const plotWidth = convergencePlotCanvas.width - 2 * padding;
-    const plotHeight = convergencePlotCanvas.height - 2 * padding;
-
-    // Draw axes
-    plotCtx.strokeStyle = '#ccc';
-    plotCtx.lineWidth = 1;
-    plotCtx.beginPath();
-    plotCtx.moveTo(padding, padding); // Y-axis top
-    plotCtx.lineTo(padding, padding + plotHeight); // Y-axis bottom
-    plotCtx.lineTo(padding + plotWidth, padding + plotHeight); // X-axis right
-    plotCtx.stroke();
-
-    // Draw labels
-    plotCtx.fillStyle = '#333';
-    plotCtx.font = '12px Inter, sans-serif';
-    plotCtx.fillText('Chi phí', padding - 25, padding + plotHeight / 2);
-    plotCtx.fillText('Vòng lặp', padding + plotWidth / 2 - 30, padding + plotHeight + 20);
-
-    // Draw cost values on Y-axis
-    plotCtx.fillText(minCost.toFixed(2), padding - 30, padding + plotHeight + 5);
-    plotCtx.fillText(maxCost.toFixed(2), padding - 30, padding + 5);
-
-    // Draw iteration values on X-axis
-    plotCtx.fillText('0', padding - 5, padding + plotHeight + 20);
-    plotCtx.fillText(maxIterations.toString(), padding + plotWidth - 10, padding + plotHeight + 20);
-
-
-    // Draw the convergence line
-    plotCtx.strokeStyle = '#7e22ce'; // Purple-700
-    plotCtx.lineWidth = 2;
-    plotCtx.beginPath();
-
-    bestCostsHistory.forEach((cost, index) => {
-        const x = padding + (index / (maxIterations - 1)) * plotWidth;
-        // Scale cost to plot height (invert y-axis for drawing)
-        const y = padding + plotHeight - ((cost - minCost) / (maxCost - minCost)) * plotHeight;
-
-        if (index === 0) {
-            plotCtx.moveTo(x, y);
-        } else {
-            plotCtx.lineTo(x, y);
-        }
-    });
-    plotCtx.stroke();
-}
-
-/**
- * Displays a message in the message box.
- * @param {string} message - The message to display.
- * @param {string} className - Tailwind CSS classes for styling the message box.
- */
-function showMessage(message, className) {
-    messageBox.textContent = message;
-    messageBox.className = `mt-4 p-3 rounded-lg ${className}`; // Apply provided classes
-    messageBox.classList.remove('hidden'); // Make it visible
-}
-
-// Ensure the animation loop starts only after the window has loaded
-window.onload = function() {
-    // Initial draw to show an empty canvas or initial state
-    drawCountries();
-    drawConvergencePlot(); // Draw empty plot initially
-    showMessage('Nhập các tham số và nhấp "Bắt đầu Mô phỏng ICA".', 'bg-purple-100 text-purple-800');
-};
+// Initial setup on page load
+resizeCanvases();
+resetSimulation();

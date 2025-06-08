@@ -1,140 +1,89 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Imperialist Competitive Algorithm - ICA</title>
-    <!-- Tailwind CSS CDN for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Custom CSS file -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Công cụ Trực quan hóa Thuật toán Imperialist Competitive Algorithm (ICA)</title>
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-gradient-to-br from-purple-50 to-indigo-100 min-h-screen flex items-center justify-center p-4">
-    <!-- Main container for the application -->
-    <div class="flex flex-col lg:flex-row items-center justify-center p-4 gap-8 w-full max-w-6xl">
+<body>
+    <div class="container">
+        <h1>Công cụ Trực quan hóa Thuật toán Imperialist Competitive Algorithm (ICA)</h1>
 
-        <!-- Controls Panel -->
-        <div id="controls" class="bg-white p-8 rounded-xl shadow-2xl flex flex-col gap-6 w-full lg:w-1/3 max-w-md border border-gray-200">
-            <h2 class="text-3xl font-bold text-gray-800 mb-4 text-center">ICA Parameters</h2>
-
-            <div class="flex flex-col gap-2">
-                <label for="objectiveFunction" class="text-lg font-medium text-gray-700">Hàm Mục tiêu:</label>
-                <select id="objectiveFunction" class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm">
-                    <option value="sphere">Sphere Function</option>
-                    <option value="rastrigin">Rastrigin Function</option>
-                    <option value="rosenbrock">Rosenbrock Function</option>
-                </select>
+        <div class="controls">
+            <div class="param-group">
+                <label for="numCountries">Số cá thể (quốc gia):</label>
+                <input type="number" id="numCountries" value="50" min="20" max="200">
             </div>
-
-            <div class="flex flex-col gap-2">
-                <label for="numCountries" class="text-lg font-medium text-gray-700">Tổng số Quốc gia:</label>
-                <input
-                    type="number"
-                    id="numCountries"
-                    value="100"
-                    min="20"
-                    max="500"
-                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
-                />
+            <div class="param-group">
+                <label for="numImperialists">Số đế quốc ban đầu:</label>
+                <input type="number" id="numImperialists" value="5" min="2" max="10">
             </div>
-
-            <div class="flex flex-col gap-2">
-                <label for="numImperialists" class="text-lg font-medium text-gray-700">Số lượng Đế quốc:</label>
-                <input
-                    type="number"
-                    id="numImperialists"
-                    value="10"
-                    min="2"
-                    max="50"
-                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
-                />
+            <div class="param-group">
+                <label for="maxIterations">Số vòng lặp tối đa:</label>
+                <input type="number" id="maxIterations" value="1000" min="100" max="5000">
             </div>
-
-            <div class="flex flex-col gap-2">
-                <label for="iterations" class="text-lg font-medium text-gray-700">Số vòng lặp:</label>
-                <input
-                    type="number"
-                    id="iterations"
-                    value="200"
-                    min="50"
-                    max="1000"
-                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
-                />
+            <div class="param-group">
+                <label for="dimensions">Số chiều (n):</label>
+                <input type="number" id="dimensions" value="2" min="2" max="30">
+                <small>(Để hiển thị trực quan, nên dùng 2D)</small>
             </div>
-
-            <div class="flex flex-col gap-2">
-                <label for="assimilationCoefficient" class="text-lg font-medium text-gray-700">Hệ số Đồng hóa (Beta):</label>
-                <input
-                    type="number"
-                    id="assimilationCoefficient"
-                    value="1.5"
-                    step="0.1"
-                    min="0.5"
-                    max="3.0"
-                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
-                />
+            <div class="param-group">
+                <label for="searchRangeMin">Phạm vi tìm kiếm (min):</label>
+                <input type="number" id="searchRangeMin" value="-5.12">
             </div>
-
-            <div class="flex flex-col gap-2">
-                <label for="revolutionRate" class="text-lg font-medium text-gray-700">Tỷ lệ Cách mạng:</label>
-                <input
-                    type="number"
-                    id="revolutionRate"
-                    value="0.05"
-                    step="0.01"
-                    min="0.0"
-                    max="0.2"
-                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
-                />
+            <div class="param-group">
+                <label for="searchRangeMax">Phạm vi tìm kiếm (max):</label>
+                <input type="number" id="searchRangeMax" value="5.12">
             </div>
-
-            <div class="flex flex-col gap-2">
-                <label for="revolutionMagnitude" class="text-lg font-medium text-gray-700">Độ lớn Cách mạng:</label>
-                <input
-                    type="number"
-                    id="revolutionMagnitude"
-                    value="0.1"
-                    step="0.01"
-                    min="0.01"
-                    max="0.5"
-                    class="p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500 text-gray-900 shadow-sm"
-                />
+            <div class="param-group">
+                <label for="assimilationCoefficient">Hệ số hấp dẫn ($\beta$):</label>
+                <input type="number" id="assimilationCoefficient" value="1.5" step="0.1" min="0.1" max="5">
             </div>
-
-            <button
-                onclick="startICA()"
-                class="bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-all duration-300 ease-in-out shadow-md hover:shadow-lg transform hover:scale-105 text-xl font-semibold mt-4"
-            >
-                Bắt đầu Mô phỏng ICA
-            </button>
-
-            <!-- Message display area -->
-            <div id="messageBox" class="mt-4 p-3 bg-purple-100 text-purple-800 rounded-lg hidden" role="alert">
-                <!-- Messages will be displayed here -->
+            <div class="param-group">
+                <label for="revolutionRate">Tỷ lệ cách mạng:</label>
+                <input type="number" id="revolutionRate" value="0.1" step="0.01" min="0" max="1">
+            </div>
+            <div class="param-group">
+                <label for="revolutionAmount">Độ lớn cách mạng ($\zeta$):</label>
+                <input type="number" id="revolutionAmount" value="0.1" step="0.01" min="0.01" max="1">
+                <small>(Phần trăm phạm vi)</small>
+            </div>
+            <div class="param-group">
+                <label for="imperialistDecayRate">Tốc độ suy yếu đế quốc:</label>
+                <input type="number" id="imperialistDecayRate" value="0.02" step="0.01" min="0" max="0.1">
+                <small>(Ảnh hưởng đến tổng chi phí)</small>
+            </div>
+             <div class="param-group">
+                <label for="unificationThreshold">Ngưỡng thống nhất:</label>
+                <input type="number" id="unificationThreshold" value="0.05" step="0.01" min="0.01" max="0.5">
+                <small>(Phần trăm phạm vi)</small>
+            </div>
+            <div class="param-group">
+                <button id="startButton">Bắt đầu mô phỏng</button>
+                <button id="resetButton">Đặt lại</button>
             </div>
         </div>
 
-        <!-- Visualization Area -->
-        <div class="flex flex-col gap-8 w-full lg:w-2/3 max-w-2xl">
-            <!-- ICA Simulation Canvas -->
-            <div class="bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex items-center justify-center p-4">
-                <canvas id="icaCanvas" width="800" height="600" class="block"></canvas>
-            </div>
+        <div class="info-panel">
+            <p>Vòng lặp: <span id="currentIteration">0</span></p>
+            <p>Chi phí tốt nhất: <span id="bestCost">N/A</span></p>
+            <p>Vị trí tốt nhất: <span id="bestPosition">N/A</span></p>
+            <p>Số đế quốc: <span id="numActiveImperialists">N/A</span></p>
+        </div>
 
-            <!-- Current Phase Indicator -->
-            <div id="phaseIndicator" class="bg-white p-4 rounded-xl shadow-md border border-gray-200 text-center text-xl font-semibold text-gray-700">
-                Giai đoạn hiện tại: <span id="currentPhase" class="text-purple-600">N/A</span>
+        <div class="visualization-area">
+            <div class="canvas-container">
+                <h2>Không gian tìm kiếm</h2>
+                <canvas id="optimizationCanvas"></canvas>
             </div>
-
-            <!-- Convergence Plot Canvas -->
-            <div class="bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden flex items-center justify-center p-4">
-                <h3 class="text-xl font-bold text-gray-800 mb-2 text-center w-full">Biểu đồ Hội tụ (Chi phí Tốt nhất)</h3>
-                <canvas id="convergencePlotCanvas" width="800" height="300" class="block"></canvas>
+            <div class="canvas-container">
+                <h2>Biểu đồ hội tụ (Chi phí tốt nhất theo vòng lặp)</h2>
+                <canvas id="convergencePlotCanvas"></canvas>
             </div>
         </div>
     </div>
 
-    <!-- Main JavaScript file -->
-    <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
-</html>
+<html>
